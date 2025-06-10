@@ -1,0 +1,4 @@
+2025-06-06 10:10:00 INFO Scheduled job started
+2025-06-06 10:10:02 ERROR Null pointer exception in TaskRunner
+2025-06-06 10:10:04 INFO Scheduled job completed
+2025-06-06 10:10:06 WARN Task took longer than expected

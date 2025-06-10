@@ -1,0 +1,4 @@
+2025-06-06 10:01:23 INFO Starting server on port 8080
+2025-06-06 10:01:25 WARN Deprecated API used in module X
+2025-06-06 10:01:30 ERROR Unable to connect to database
+2025-06-06 10:01:35 INFO Server started successfully
