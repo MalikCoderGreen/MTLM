@@ -2,3 +2,6 @@
 2025-06-06 10:05:12 INFO User login: admin
 2025-06-06 10:05:15 ERROR Failed login attempt from IP 192.168.1.5
 2025-06-06 10:05:18 WARN Disk space low on /dev/sda1
+2025-06-06 10:05:18 WARN Disk space low on /dev/sda2
+2025-06-06 10:05:15 ERROR Failed login attempt from IP 192.168.1.5
+2025-06-06 10:05:12 INFO User login: admin
