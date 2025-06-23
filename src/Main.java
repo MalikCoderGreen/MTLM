@@ -20,15 +20,13 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class Main {
 
     public static void main(String[] args) throws IOException, InterruptedException {
-        Map<String, Integer> logMap = new ConcurrentHashMap<>();
-        logMap.put("ERROR", 0);
-        logMap.put("INFO", 0);
-        logMap.put("WARN", 0);
-        String[] logFiles = {"server1.log", "server2.log", "server3.log"};
+        Map<String, Map<String, Integer>> logMap = new ConcurrentHashMap<>();
+        ReentrantLock alertLock = new ReentrantLock();
         Set<String> inProgressFiles = new HashSet<>();
         var executor = Executors.newFixedThreadPool(3);
 
@@ -48,11 +46,18 @@ public class Main {
                 String fileName = e.context().toString();
                 if (e.kind() == StandardWatchEventKinds.ENTRY_CREATE || e.kind() == StandardWatchEventKinds.ENTRY_MODIFY) {
 
-                // Swap files end up being created causing duplicate key counts.
+                    // Swap files end up being created causing duplicate key counts.
+                    // Using a set because multiple threads keep counting the same file.
                   if (!fileName.endsWith("~") && inProgressFiles.add(fileName)) {
+                      if (!logMap.containsKey(fileName)) {
+                          logMap.put(fileName, new ConcurrentHashMap<>());
+                          logMap.get(fileName).put("ERROR", 0);
+                          logMap.get(fileName).put("INFO", 0);
+                          logMap.get(fileName).put("WARN", 0);
+                      }
                         executor.submit(() -> {
                             try {
-                                new LogReaderRunnable(logMap, fileName).run();
+                                new LogReaderRunnable(logMap, fileName, alertLock).run();
                             } finally {
                                 inProgressFiles.remove(fileName);
                         }
