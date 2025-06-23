@@ -28,8 +28,8 @@ public class Main {
         Map<String, Map<String, Integer>> logMap = new ConcurrentHashMap<>();
         ReentrantLock alertLock = new ReentrantLock();
         Set<String> inProgressFiles = new HashSet<>();
-        var executor = Executors.newFixedThreadPool(3);
-
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+        int pollCounter = 0;
         // week 2: implement watch service
         WatchService watchService = FileSystems.getDefault().newWatchService();
         Path directory = Paths.get(".");
@@ -38,9 +38,16 @@ public class Main {
                 StandardWatchEventKinds.ENTRY_MODIFY,
                 StandardWatchEventKinds.ENTRY_DELETE);
 
-        while ((watchKey = watchService.take()) != null) {
+        // TODO: Add ScheduledExecutor functionality to print real-time stats every 10 seconds
+        // TODO: Fix poll timeout to timeout even if events occurred but no successive events occurred.
+        while (pollCounter < 3) {
+            watchKey = watchService.poll(5, TimeUnit.SECONDS);
+
+            if (watchKey == null) {
+                break;
+            }
+
             List<WatchEvent<?>> events = watchKey.pollEvents();
-            System.out.println(events.size());
 
             for (WatchEvent<?> e : events) {
                 String fileName = e.context().toString();
@@ -48,7 +55,7 @@ public class Main {
 
                     // Swap files end up being created causing duplicate key counts.
                     // Using a set because multiple threads keep counting the same file.
-                  if (!fileName.endsWith("~") && inProgressFiles.add(fileName)) {
+                  if (fileName.startsWith("server") && !fileName.endsWith("~") && inProgressFiles.add(fileName)) {
                       if (!logMap.containsKey(fileName)) {
                           logMap.put(fileName, new ConcurrentHashMap<>());
                           logMap.get(fileName).put("ERROR", 0);
@@ -69,6 +76,25 @@ public class Main {
             watchKey.reset();
         }
 
-        executor.shutdown();
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                System.err.println("Executor termination interrupted");
+                executor.shutdownNow();
+            }
+
+            // Close WatchService
+            try {
+                watchService.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+        }));
     }
+
 }

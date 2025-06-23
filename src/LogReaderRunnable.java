@@ -40,9 +40,9 @@ public class LogReaderRunnable implements Runnable {
             e.printStackTrace();
         }
 
-        sharedMap.get(this.logPath).forEach((K, V) ->
-                System.out.printf("%s => Severity: %s, Count: %d\n", threadName, K, V)
-        );
+//        sharedMap.get(this.logPath).forEach((K, V) ->
+//                System.out.printf("%s => Severity: %s, Count: %d\n", threadName, K, V)
+//        );
 
         checkErrorCount();
     }
