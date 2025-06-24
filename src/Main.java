@@ -29,7 +29,7 @@ public class Main {
         ReentrantLock alertLock = new ReentrantLock();
         Set<String> inProgressFiles = new HashSet<>();
         ExecutorService executor = Executors.newFixedThreadPool(3);
-        int pollCounter = 0;
+
         // week 2: implement watch service
         WatchService watchService = FileSystems.getDefault().newWatchService();
         Path directory = Paths.get(".");
@@ -40,40 +40,56 @@ public class Main {
 
         // TODO: Add ScheduledExecutor functionality to print real-time stats every 10 seconds
         // TODO: Fix poll timeout to timeout even if events occurred but no successive events occurred.
-        while (pollCounter < 3) {
-            watchKey = watchService.poll(5, TimeUnit.SECONDS);
-
-            if (watchKey == null) {
+        long lastEventTime = System.currentTimeMillis();
+        while (true) {
+            System.out.println("Beginning of While loop");
+            long currentTime = System.currentTimeMillis();
+            if (lastEventTime > 0 && currentTime - lastEventTime > 5000) {
                 break;
             }
+            watchKey = watchService.poll(5, TimeUnit.SECONDS);
 
-            List<WatchEvent<?>> events = watchKey.pollEvents();
 
-            for (WatchEvent<?> e : events) {
-                String fileName = e.context().toString();
-                if (e.kind() == StandardWatchEventKinds.ENTRY_CREATE || e.kind() == StandardWatchEventKinds.ENTRY_MODIFY) {
-
-                    // Swap files end up being created causing duplicate key counts.
-                    // Using a set because multiple threads keep counting the same file.
-                  if (fileName.startsWith("server") && !fileName.endsWith("~") && inProgressFiles.add(fileName)) {
-                      if (!logMap.containsKey(fileName)) {
-                          logMap.put(fileName, new ConcurrentHashMap<>());
-                          logMap.get(fileName).put("ERROR", 0);
-                          logMap.get(fileName).put("INFO", 0);
-                          logMap.get(fileName).put("WARN", 0);
-                      }
-                        executor.submit(() -> {
-                            try {
-                                new LogReaderRunnable(logMap, fileName, alertLock).run();
-                            } finally {
-                                inProgressFiles.remove(fileName);
+            if (watchKey != null) {
+                System.out.println("HEREE WITH lastEventTime = " + lastEventTime + " and currentTime = " + currentTime);
+                boolean hasRelevant = false;
+                List<WatchEvent<?>> events = watchKey.pollEvents();
+                for (WatchEvent<?> e : events) {
+                    String fileName = e.context().toString();
+                    System.out.println("HERE lvl 0" + " " + fileName + " " + e.kind());
+                    if (e.kind() == StandardWatchEventKinds.ENTRY_CREATE || e.kind() == StandardWatchEventKinds.ENTRY_MODIFY) {
+                        System.out.println("HERE lvl 1" + " " + fileName + " " + e.kind());
+                        // Swap files end up being created causing duplicate key counts.
+                        // Using a set because multiple threads keep counting the same file.
+                        if (fileName.startsWith("server") && !fileName.endsWith("~") && inProgressFiles.add(fileName)) {
+                            hasRelevant = true;
+                            System.out.println("HERE lvl 2" + " " + fileName + " " + e.kind());
+                            if (!logMap.containsKey(fileName)) {
+                                logMap.putIfAbsent(fileName, new ConcurrentHashMap<>(Map.of(
+                                        "ERROR", 0, "INFO", 0, "WARN", 0
+                                )));
+                            }
+                            executor.submit(() -> {
+                                try {
+                                    new LogReaderRunnable(logMap, fileName, alertLock).run();
+                                } finally {
+                                    inProgressFiles.remove(fileName);
+                                    System.out.println("Thread: " + Thread.currentThread().getName() + " Removing : " + fileName + " from the set.");
+                                }
+                            });
                         }
-                  });
-                  }
+                    }
                 }
+
+                if (hasRelevant) {
+                    lastEventTime = currentTime;
+                }
+
+                watchKey.reset();
+                System.out.println("Exiting watchKey if statement");
             }
 
-            watchKey.reset();
+            System.out.println("Going to next iteration of loop");
         }
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

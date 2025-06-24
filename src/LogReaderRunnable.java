@@ -49,12 +49,15 @@ public class LogReaderRunnable implements Runnable {
 
     public void checkErrorCount() {
         try {
+            System.out.println("checkErrorCount() Thread: " + Thread.currentThread().getName() + " is trying to acquire the lock ");
             this.alertLock.lock();
             if (this.sharedMap.get(this.logPath).containsKey("ERROR") && this.sharedMap.get(this.logPath).get("ERROR") >= 10) {
-                System.out.printf("%s TOO MANY ERRORS!!!", Thread.currentThread().getName());
+                System.out.println("Thread: " +  Thread.currentThread().getName() + "TOO MANY ERRORS!!!");
             }
         } finally {
             this.alertLock.unlock();
         }
+
+        System.out.println("Thread " + Thread.currentThread().getName() + " released the lock; exiting checkErrorCount()");
     }
 }
