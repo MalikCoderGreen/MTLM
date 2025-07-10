@@ -4,11 +4,14 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Logger;
 
 public class LogReaderRunnable implements Runnable {
     private final Map<String, Map<String, Integer>> sharedMap;
     private final ReentrantLock alertLock;
     private final String logPath;
+    private final String threadName = Thread.currentThread().getName();
+    private static final Logger logger = Logger.getLogger(LogReaderRunnable.class.getName());
 
     public LogReaderRunnable(Map<String, Map<String, Integer>> sharedMap, String logPath, ReentrantLock alertLock) {
         this.sharedMap = sharedMap;
@@ -18,9 +21,8 @@ public class LogReaderRunnable implements Runnable {
 
     @Override
     public void run() {
-        String threadName = Thread.currentThread().getName();
         try {
-            System.out.printf("%s is handling this task for file: %s\n", threadName, this.logPath);
+            logger.info("Thread " + threadName + " is handling this task for file: " + this.logPath);
             BufferedReader reader = new BufferedReader(new FileReader(this.logPath));
             String line = reader.readLine();
 
@@ -40,24 +42,24 @@ public class LogReaderRunnable implements Runnable {
             e.printStackTrace();
         }
 
-//        sharedMap.get(this.logPath).forEach((K, V) ->
-//                System.out.printf("%s => Severity: %s, Count: %d\n", threadName, K, V)
-//        );
+        sharedMap.get(this.logPath).forEach((K, V) ->
+                System.out.printf("%s => Severity: %s, Count: %d\n", threadName, K, V)
+        );
 
         checkErrorCount();
     }
 
     public void checkErrorCount() {
         try {
-            System.out.println("checkErrorCount() Thread: " + Thread.currentThread().getName() + " is trying to acquire the lock ");
+            logger.info("checkErrorCount() Thread: " + threadName + " is trying to acquire the lock ");
             this.alertLock.lock();
             if (this.sharedMap.get(this.logPath).containsKey("ERROR") && this.sharedMap.get(this.logPath).get("ERROR") >= 10) {
-                System.out.println("Thread: " +  Thread.currentThread().getName() + "TOO MANY ERRORS!!!");
+                logger.info("Thread: " +  Thread.currentThread().getName() + "TOO MANY ERRORS!!!");
             }
         } finally {
             this.alertLock.unlock();
         }
 
-        System.out.println("Thread " + Thread.currentThread().getName() + " released the lock; exiting checkErrorCount()");
+        logger.info("Thread: " + Thread.currentThread().getName() + " released the lock; exiting checkErrorCount()");
     }
 }
