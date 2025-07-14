@@ -29,10 +29,14 @@ public class Main {
 
     private static final Logger logger = Logger.getLogger(PrintStatsRunnable.class.getName());
     public static void main(String[] args) throws IOException, InterruptedException {
+        int BOUND = 10;
+        int NUM_CONSUMERS = 3;
+        String POISON_PILL = "STOP";
+
         Map<String, Map<String, Integer>> logMap = new ConcurrentHashMap<>();
         ReentrantLock alertLock = new ReentrantLock();
         Set<String> inProgressFiles = new HashSet<>();
-        ExecutorService executor = Executors.newFixedThreadPool(3);
+        ExecutorService executor = Executors.newFixedThreadPool(NUM_CONSUMERS);
 
         // week 2: implement watch service
         WatchService watchService = FileSystems.getDefault().newWatchService();
@@ -41,9 +45,24 @@ public class Main {
                 StandardWatchEventKinds.ENTRY_CREATE,
                 StandardWatchEventKinds.ENTRY_MODIFY);
 
-        // week 6: consumer queue and flush to output.log.
+        // week 5: consumer queue and flush to output.log.
         ScheduledExecutorService consumerExecutor = Executors.newScheduledThreadPool(1);
         ConcurrentLinkedQueue<String> logSummaryQueue = new ConcurrentLinkedQueue<>();
+
+        // Decouple server log file processing using a BlockingQueue
+        MyBlockingQueue<String> fileBlockingQueue = new MyBlockingQueue<>(BOUND);
+
+        Runnable blockingQueueConsumerRunnable = () -> {
+            while (true) {
+                // Consume from the queue
+                String file = fileBlockingQueue.dequeue();
+                if (file.equals("STOP")) {
+                    break;
+                }
+                inProgressFiles.remove(file);
+                logger.info("File " + file + " has been processed");
+            }
+        };
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 
@@ -89,16 +108,19 @@ public class Main {
         long lastEventTime = System.currentTimeMillis();
         try {
             while (true) {
-                logger.info("Beginning of While loop");
+                //logger.info("Beginning of While loop");
                 long currentTime = System.currentTimeMillis();
+
+                // Too much time has passed since the last file event; break out of loop
                 if (lastEventTime > 0 && currentTime - lastEventTime > 10000) {
                     break;
                 }
-                watchKey = watchService.poll(5, TimeUnit.SECONDS);
 
+                watchKey = watchService.poll(5, TimeUnit.SECONDS);
                 if (watchKey != null) {
                     //logger.info("HEREE WITH lastEventTime = " + lastEventTime + " and currentTime = " + currentTime);
                     boolean hasRelevant = false;
+
                     List<WatchEvent<?>> events = watchKey.pollEvents();
                     for (WatchEvent<?> event : events) {
                         String fileName = event.context().toString();
@@ -107,30 +129,15 @@ public class Main {
                             // Using a set because multiple threads keep counting the same file.
                             if (fileName.startsWith("server") && !fileName.endsWith("~") && inProgressFiles.add(fileName)) {
                                 hasRelevant = true;
-                                logger.info("HERE lvl 2" + " " + fileName + " " + event.kind());
                                 if (!logMap.containsKey(fileName)) {
                                     logMap.putIfAbsent(fileName, new ConcurrentHashMap<>(Map.of(
                                             "ERROR", 0, "INFO", 0, "WARN", 0
                                     )));
                                 }
-                                executor.submit(() -> {
-                                    try {
-                                        new LogReaderRunnable(logMap, fileName, alertLock).run();
-                                        // Push to queue
-                                        try {
-                                            LogSummary summary = new LogSummary(fileName, logMap.get(fileName));
-                                            logSummaryQueue.offer(JsonFormatter.prettyPrint(summary));
-                                        } catch (Exception e) {
-                                            e.printStackTrace();
-                                        }
-                                    } finally {
-                                        inProgressFiles.remove(fileName);
-                                        logger.info("Thread: " + Thread.currentThread().getName() + " Removing : " + fileName + " from the set.");
-                                    }
-                                });
+
+                                fileBlockingQueue.enqueue(fileName);
                             }
                         }
-
                     }
 
                     if (hasRelevant) {
@@ -139,11 +146,17 @@ public class Main {
 
                     watchKey.reset();
                     logger.info("Exiting watchKey if statement");
-
                 }
             }
 
         } finally {
+            for (int i = 0; i < NUM_CONSUMERS; i++) {
+                executor.submit(blockingQueueConsumerRunnable);
+            }
+            for (int i = 0; i < NUM_CONSUMERS; i++) {
+                fileBlockingQueue.enqueue("STOP");
+            }
+
             if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
                 executor.shutdownNow();
                 consumerExecutor.shutdownNow();
