@@ -16,7 +16,6 @@ Concepts Used: ExecutorService, Callable, Future, ConcurrentHashMap
  */
 
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.*;
@@ -27,7 +26,7 @@ import java.util.logging.Logger;
 
 public class Main {
 
-    private static final Logger logger = Logger.getLogger(PrintStatsRunnable.class.getName());
+    private static final Logger logger = Logger.getLogger(Main.class.getName());
     public static void main(String[] args) throws IOException, InterruptedException {
         int BOUND = 10;
         int NUM_CONSUMERS = 3;
@@ -40,7 +39,7 @@ public class Main {
 
         // week 2: implement watch service
         WatchService watchService = FileSystems.getDefault().newWatchService();
-        Path directory = Paths.get(".");
+        Path directory = Paths.get("./logs");
         WatchKey watchKey = directory.register(watchService,
                 StandardWatchEventKinds.ENTRY_CREATE,
                 StandardWatchEventKinds.ENTRY_MODIFY);
@@ -65,7 +64,6 @@ public class Main {
         };
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-
             executor.shutdown();
             consumerExecutor.shutdown();
 
@@ -119,16 +117,21 @@ public class Main {
                 watchKey = watchService.poll(5, TimeUnit.SECONDS);
                 if (watchKey != null) {
                     //logger.info("HEREE WITH lastEventTime = " + lastEventTime + " and currentTime = " + currentTime);
+                    //logger.info("Time elapsed = " + (currentTime - lastEventTime));
                     boolean hasRelevant = false;
 
                     List<WatchEvent<?>> events = watchKey.pollEvents();
                     for (WatchEvent<?> event : events) {
                         String fileName = event.context().toString();
                         if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE || event.kind() == StandardWatchEventKinds.ENTRY_MODIFY) {
+                            if (!fileName.endsWith("~")) {
+                                logger.info("NEW " + event.kind().toString() + " event for file " + fileName);
+                            }
                             // Swap files end up being created causing duplicate key counts.
                             // Using a set because multiple threads keep counting the same file.
                             if (fileName.startsWith("server") && !fileName.endsWith("~") && inProgressFiles.add(fileName)) {
                                 hasRelevant = true;
+                                //logger.info("Value of hasRelevant = " + hasRelevant);
                                 if (!logMap.containsKey(fileName)) {
                                     logMap.putIfAbsent(fileName, new ConcurrentHashMap<>(Map.of(
                                             "ERROR", 0, "INFO", 0, "WARN", 0
@@ -136,16 +139,19 @@ public class Main {
                                 }
 
                                 fileBlockingQueue.enqueue(fileName);
+                                logger.info("Size of queue = " + fileBlockingQueue.size());
+                                inProgressFiles.remove(fileName);
                             }
                         }
                     }
 
                     if (hasRelevant) {
                         lastEventTime = currentTime;
+                        //logger.info("Set lastEventTime to currentTime");
                     }
 
                     watchKey.reset();
-                    logger.info("Exiting watchKey if statement");
+                    //logger.info("Exiting watchKey if statement");
                 }
             }
 
