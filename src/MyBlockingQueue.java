@@ -16,6 +16,7 @@ public class MyBlockingQueue<T> {
         synchronized(this) {
             while (internalDeque.size() == MAX_CAPACITY) {
                 try {
+                    logger.info("Size is full! waiting to free up capacity");
                     this.wait();
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
@@ -50,5 +51,9 @@ public class MyBlockingQueue<T> {
 
     public int getMaxCapacity() {
         return this.MAX_CAPACITY;
+    }
+
+    public int size() {
+        return this.internalDeque.size();
     }
 }
