@@ -23,7 +23,7 @@ public class LogReaderRunnable implements Runnable {
     public void run() {
         try {
             logger.info("Thread " + threadName + " is handling this task for file: " + this.logPath);
-            BufferedReader reader = new BufferedReader(new FileReader(this.logPath));
+            BufferedReader reader = new BufferedReader(new FileReader("./logs/" + this.logPath));
             String line = reader.readLine();
 
             while (line != null) {
@@ -42,9 +42,9 @@ public class LogReaderRunnable implements Runnable {
             e.printStackTrace();
         }
 
-        sharedMap.get(this.logPath).forEach((K, V) ->
-                System.out.printf("%s => Severity: %s, Count: %d\n", threadName, K, V)
-        );
+//        sharedMap.get(this.logPath).forEach((K, V) ->
+//                System.out.printf("%s => Severity: %s, Count: %d\n", threadName, K, V)
+//        );
 
         checkErrorCount();
     }
